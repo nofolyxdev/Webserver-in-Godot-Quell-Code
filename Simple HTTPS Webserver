@@ -1,0 +1,96 @@
+extends Node
+const WEB_RES := "res://assets/web_res"
+
+var tcp_server := TCPServer.new()
+var port := 8443
+var tls_options : TLSOptions
+var web_server_started = false
+var pending_connections : Array[Thread]
+var connection_count : int
+
+func _ready() -> void:
+	_generate_certificate_for_https()
+	tcp_server.listen(port)
+	web_server_started = true
+	print("Server startet unter: https://" + ServerInfos.ip+":"+str(port)+"/index.html")
+
+
+func _process(delta: float) -> void:
+	if tcp_server.is_connection_available():
+		var tcp_connection := tcp_server.take_connection()
+		print("Neue Verbindung...")
+		if tcp_connection.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			var tls_connection = StreamPeerTLS.new()
+			var status = tls_connection.accept_stream(tcp_connection, tls_options)# Verbessert den tcp_connection zu einem tls_connection
+			if status == OK:
+				connection_count +=1
+				print(connection_count)
+				var new_thread : Thread = Thread.new()
+				pending_connections.append(new_thread)
+				new_thread.start(_thread_handle_connection.bind(tls_connection))
+
+func _thread_handle_connection(connection : StreamPeerTLS):
+	connection.poll()
+	print(pending_connections.size())
+	print(connection)
+	if connection.get_status() == StreamPeerTLS.STATUS_CONNECTED:
+		connection.poll()
+		if connection.get_available_bytes() > 0 && connection.get_status() == StreamPeerTLS.STATUS_CONNECTED:
+			print("I habe bytes")
+			var bytes_available = connection.get_available_bytes()
+			var data = connection.get_utf8_string(bytes_available)
+			var new_line = data.find("\n")
+			var message : String = data.substr(0, new_line)#gets first line from message
+			print(message)
+			if message.length() > 0:
+				handle_client_message(connection, message)
+			print("Stop")
+		else:
+			connection.poll()
+	
+
+func handle_client_message(connection: StreamPeerTLS, message: String):
+	var parts = message.strip_edges().split(" ", false, 2)
+	if parts.size() < 3:
+		return
+	var resource = parts[1] if parts.size() > 1 else ""#gets the request from the client
+	print(resource)
+	if parts[0] == "GET" and parts[2] == "HTTP/1.1":
+		send_to_client(connection, resource)
+	else:
+		print("Error")
+		connection.disconnect_from_stream()
+		await get_tree().create_timer(1.0).timeout
+
+func send_to_client(connection: StreamPeerTLS, resource: String):#sends request data
+	var path = WEB_RES + resource
+	if path.begins_with("res://assets/web_res") and not path.contains(".."):#Sicherung
+		var file = FileAccess.open(path, FileAccess.READ)#IDK
+		if file:
+			var header := "HTTP/1.1 200 OK\r\n\r\n"#IDK
+			var content := file.get_buffer(file.get_length())#IDK muss ich research machn damit es rltk meins ist
+			file.close() 
+			connection.put_data(header.to_utf8_buffer())
+			connection.put_data(content)
+		else:
+			var header := "HTTP/1.1 404 OK\r\n\r\n"
+			print("no")
+			connection.put_data(header.to_utf8_buffer())
+			connection.disconnect_from_stream()
+			await get_tree().create_timer(1.0).timeout
+	connection.disconnect_from_stream()
+	await get_tree().create_timer(1.0).timeout
+
+
+
+func _exit_tree() -> void:# Thread auflösen
+	for thread in pending_connections:
+		thread.wait_to_finish()
+
+
+func _generate_certificate_for_https():# Generiert ein Selbstsigniertes Zeertifikat für Https
+	var crypto = Crypto.new()
+	var key = crypto.generate_rsa(2048)#4096 klappt nt weil dauert zu lange
+	var cert = crypto.generate_self_signed_certificate(key, "CN="+ServerInfos._get_ip()+",O=PlayTogether,C=IT")
+	
+	tls_options = TLSOptions.server(key, cert)
