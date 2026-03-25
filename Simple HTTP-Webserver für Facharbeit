@@ -1,0 +1,59 @@
+extends Node
+const WEB_RES := "res://web_res"
+
+var tcp_server := TCPServer.new()
+var port : int = 8080
+var web_server_started = false
+
+func _ready() -> void:
+	tcp_server.listen(port)
+	web_server_started = true
+	print(port)
+	print("Server startet unter: http://" + ServerInfos._get_ip()+":"+str(port)+"/index.html")
+
+
+
+func _process(delta: float) -> void:
+	if tcp_server.is_connection_available():
+		var connection := tcp_server.take_connection()
+		print("Neue Verbindung...")
+		connection.poll()
+		if connection.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			if connection.get_available_bytes() > 0:
+				print("bytes da")
+				var bytes_available = connection.get_available_bytes()
+				var data = connection.get_utf8_string(bytes_available)
+				var new_line = data.find("\n")
+				var message : String = data.substr(0, new_line)#gets first line from message
+				print(message)
+				if message.length() > 0:
+					handle_client_message(connection, message)
+
+
+func handle_client_message(connection: StreamPeerTCP, message: String):
+	var parts = message.strip_edges().split(" ", false, 2)
+	if parts.size() < 3:
+		return
+	var resource = parts[1] if parts.size() > 1 else ""#gets the request from the client
+	print(resource)
+	if parts[0] == "GET" and parts[2] == "HTTP/1.1":
+		send_to_client(connection, resource)
+	else:
+		print("Error")
+		connection.disconnect_from_host()
+
+func send_to_client(connection: StreamPeerTCP, resource: String):#sends request data
+	var path = WEB_RES + resource
+	if path.begins_with("res://web_res") and not path.contains(".."):#Sicherung
+		var file = FileAccess.open(path, FileAccess.READ)
+		if file:
+			var header := "HTTP/1.1 200 OK\r\n\r\n"
+			var content := file.get_buffer(file.get_length())
+			file.close() 
+			connection.put_data(header.to_utf8_buffer())
+			connection.put_data(content)
+		else:
+			var header := "HTTP/1.1 404 OK\r\n\r\n"
+			print("no")
+			connection.put_data(header.to_utf8_buffer())
+			connection.disconnect_from_host()
