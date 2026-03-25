@@ -1,0 +1,12 @@
+extends Node
+
+var ip
+
+func _get_ip()->String:#gibt aktuelle IP zurück
+	var _ip
+	for adress in IP.get_local_addresses():
+		if adress.begins_with("192") or adress.begins_with("172") or adress.begins_with("10"):
+			ip = adress
+	return ip
+
+	
