@@ -1,5 +1,5 @@
 extends Node
-const WEB_RES := "res://web_res"
+const WEB_RES := "res://assets/web_res"
 
 var tcp_server := TCPServer.new()
 var port : int = 8080
@@ -44,7 +44,7 @@ func handle_client_message(connection: StreamPeerTCP, message: String):
 
 func send_to_client(connection: StreamPeerTCP, resource: String):#sends request data
 	var path = WEB_RES + resource
-	if path.begins_with("res://web_res") and not path.contains(".."):#Sicherung
+	if path.begins_with("res://assets/web_res") and not path.contains(".."):#Sicherung
 		var file = FileAccess.open(path, FileAccess.READ)
 		if file:
 			var header := "HTTP/1.1 200 OK\r\n\r\n"
