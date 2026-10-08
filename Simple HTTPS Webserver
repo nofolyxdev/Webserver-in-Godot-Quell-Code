@@ -67,8 +67,8 @@ func send_to_client(connection: StreamPeerTLS, resource: String):#sends request 
 	if path.begins_with("res://assets/web_res") and not path.contains(".."):#Sicherung
 		var file = FileAccess.open(path, FileAccess.READ)#IDK
 		if file:
-			var header := "HTTP/1.1 200 OK\r\n\r\n"#IDK
-			var content := file.get_buffer(file.get_length())#IDK muss ich research machn damit es rltk meins ist
+			var header := "HTTP/1.1 200 OK\r\n\r\n"
+			var content := file.get_buffer(file.get_length())
 			file.close() 
 			connection.put_data(header.to_utf8_buffer())
 			connection.put_data(content)
